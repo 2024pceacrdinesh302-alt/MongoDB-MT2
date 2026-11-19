@@ -1,0 +1,120 @@
+use cafeDB
+
+db.orders.insertMany([
+  { _id: 1, customer: "Meena", item: "Coffee", qty: 2, price: 120, status: "delivered" },
+  { _id: 2, customer: "Ravi", item: "Sandwich", qty: 1, price: 180, status: "delivered" },
+  { _id: 3, customer: "Meena", item: "Sandwich", qty: 2, price: 180, status: "cancelled" },
+  { _id: 4, customer: "Karthik", item: "Coffee", qty: 3, price: 120, status: "delivered" },
+  { _id: 5, customer: "Ravi", item: "Coffee", qty: 1, price: 120, status: "delivered" },
+  { _id: 6, customer: "Meena", item: "Cake", qty: 1, price: 250, status: "delivered" },
+  { _id: 7, customer: "Karthik", item: "Cake", qty: 2, price: 250, status: "pending" }
+])
+
+// 1. Count orders by status (most orders first)
+db.orders.aggregate([
+  { $group: { _id: "$status", count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+])
+
+// 2. List only delivered orders (customer, item, qty)
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  { $project: { _id: 0, customer: 1, item: 1, qty: 1 } }
+])
+
+// 3. Total quantity and revenue per item for delivered orders (highest revenue first)
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  {
+    $group: {
+      _id: "$item",
+      totalQty: { $sum: "$qty" },
+      revenue: { $sum: { $multiply: ["$qty", "$price"] } }
+    }
+  },
+  { $sort: { revenue: -1 } }
+])
+
+// 4. Customer order count and total spend for delivered orders (rename _id to customer)
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  {
+    $group: {
+      _id: "$customer",
+      orders: { $sum: 1 },
+      totalSpend: { $sum: { $multiply: ["$qty", "$price"] } }
+    }
+  },
+  { $sort: { totalSpend: -1 } },
+  { $project: { _id: 0, customer: "$_id", orders: 1, totalSpend: 1 } }
+])
+
+// 5. Single best customer
+db.orders.aggregate([
+  { $match: { status: "delivered" } },
+  {
+    $group: {
+      _id: "$customer",
+      totalSpend: { $sum: { $multiply: ["$qty", "$price"] } }
+    }
+  },
+  { $sort: { totalSpend: -1 } },
+  { $limit: 1 }
+])
+ 
+
+2.use libraryDB
+
+db.books.insertMany([
+  { _id: 1, title: "Database Systems", author: "Elmasri", copies: 5, status: "available" },
+  { _id: 2, title: "Operating Systems", author: "Galvin", copies: 3, status: "available" },
+  { _id: 3, title: "Computer Networks", author: "Tanenbaum", copies: 0, status: "unavailable" },
+  { _id: 4, title: "Old Almanac 1990", author: "Unknown", copies: 0, status: "unavailable" },
+  { _id: 5, title: "Torn Notes", author: "Unknown", copies: 0, status: "damaged" },
+  { _id: 6, title: "Water-damaged Atlas", author: "Unknown", copies: 1, status: "damaged" }
+])
+
+// Task 1: Two new copies of "Operating Systems" have arrived. Add them to the stock.
+db.books.updateOne(
+  { title: "Operating Systems" },
+  { $inc: { copies: 2 } }
+)
+
+// Task 2: A student borrows one copy of "Database Systems". Reduce its copies by 1.
+db.books.updateOne(
+  { title: "Database Systems" },
+  { $inc: { copies: -1 } }
+)
+
+// Task 3: Upsert "Artificial Intelligence" (run twice to compare results)
+// First run (inserts document):
+db.books.updateOne(
+  { title: "Artificial Intelligence" },
+  { $set: { author: "Russell", copies: 4, status: "available" } },
+  { upsert: true }
+)
+
+// Second run (matches existing document, no changes made):
+db.books.updateOne(
+  { title: "Artificial Intelligence" },
+  { $set: { author: "Russell", copies: 4, status: "available" } },
+  { upsert: true }
+)
+
+// Task 4: Set "Computer Networks" status to "available" and add 3 copies in a single update
+db.books.updateOne(
+  { title: "Computer Networks" },
+  { $set: { status: "available" }, $inc: { copies: 3 } }
+)
+
+// Task 5: Remove the book "Old Almanac 1990" from the collection
+db.books.deleteOne({ title: "Old Almanac 1990" })
+
+// Task 6: Remove all books whose status is "damaged" or "lost"
+db.books.deleteMany({ status: { $in: ["damaged", "lost"] } })
+
+// Task 7: List the remaining books showing only title and copies, sorted by title
+db.books.find(
+  {},
+  { _id: 0, title: 1, copies: 1 }
+).sort({ title: 1 })s 
